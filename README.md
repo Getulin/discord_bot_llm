@@ -52,8 +52,6 @@ TMP_AUDIO_DIR=tmp/audio
 DEBUG=false
 ```
 
-Nunca coloque valores reais de token no repositorio. O `.gitignore` ignora `.env` e `tmp/`.
-
 ## Rodando
 
 ```bash
