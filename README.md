@@ -100,14 +100,8 @@ Os logs nao registram falas completas, transcricoes completas, respostas complet
 
 Arquivos temporarios podem ser criados em `TMP_AUDIO_DIR` para transcricao e resposta por voz. Eles sao removidos em bloco `finally`, inclusive em caso de erro.
 
-## Limitacoes conhecidas sobre audio no Discord
+## Limitações conhecidas sobre audio no Discord
 
 Receber audio com `@discordjs/voice` depende do receiver de voz, que e uma area menos estavel que tocar audio. O bot usa `selfDeaf: false`, captura quando o usuario comeca a falar e encerra depois de silencio configuravel. Em servidores com rede instavel, perdas de pacote, permissoes incompletas ou versoes antigas de dependencias, a captura pode falhar ou gerar transcricoes incompletas.
 
 O bot tambem ignora novas falas enquanto esta processando uma fala e ignora audio enquanto esta reproduzindo a propria resposta para reduzir loops.
-
-## Referencias oficiais da OpenAI
-
-- Speech to text: https://platform.openai.com/docs/guides/speech-to-text
-- Text to speech: https://platform.openai.com/docs/guides/text-to-speech
-- Audio API reference: https://platform.openai.com/docs/api-reference/audio
