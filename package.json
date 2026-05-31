@@ -1,6 +1,6 @@
 {
   "name": "discord-bot-llm",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Bot de Discord com wake word, transcricao e resposta por voz usando a API oficial da OpenAI.",
   "main": "dist/index.js",
   "type": "module",

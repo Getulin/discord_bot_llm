@@ -34,8 +34,15 @@ export async function transcribeUserAudioInChunks(
   let buffers: Buffer[] = [];
   let bufferedBytes = 0;
   const transcripts: string[] = [];
+  const pendingTranscripts: Array<Promise<void>> = [];
   let chunkIndex = 0;
-  let processingChain = Promise.resolve();
+  let activeTranscriptions = 0;
+
+  async function waitForFreeSlot(): Promise<void> {
+    while (activeTranscriptions >= config.audioChunkConcurrency) {
+      await Promise.race(pendingTranscripts);
+    }
+  }
 
   function enqueueChunk(force: boolean): void {
     if (bufferedBytes === 0) return;
@@ -48,12 +55,22 @@ export async function transcribeUserAudioInChunks(
     chunkIndex += 1;
     const currentIndex = chunkIndex;
 
-    processingChain = processingChain.then(async () => {
+    const task = (async () => {
+      await waitForFreeSlot();
+      activeTranscriptions += 1;
       const text = await transcribePcmChunk(chunk, currentIndex);
       if (text) {
-        transcripts.push(text);
+        transcripts[currentIndex - 1] = text;
+      }
+    })().finally(() => {
+      activeTranscriptions -= 1;
+      const index = pendingTranscripts.indexOf(task);
+      if (index !== -1) {
+        pendingTranscripts.splice(index, 1);
       }
     });
+
+    pendingTranscripts.push(task);
   }
 
   decoder.on("data", (chunk: Buffer) => {
@@ -76,9 +93,9 @@ export async function transcribeUserAudioInChunks(
     ]);
 
     enqueueChunk(true);
-    await processingChain;
+    await Promise.all(pendingTranscripts);
     logger.info(`Captura semi-tempo-real concluida com ${chunkIndex} chunk(s).`);
-    return transcripts.join(" ").replace(/\s+/g, " ").trim();
+    return transcripts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
   } catch (error) {
     opusStream.destroy();
     decoder.destroy();
