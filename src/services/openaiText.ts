@@ -1,18 +1,8 @@
-import { openai } from "./openaiClient.js";
+import { getOpenAI } from "./openaiClient.js";
 import { config } from "../config.js";
 import { clipForSpeech } from "../utils/sanitize.js";
 import { logger } from "../utils/logger.js";
-
-const systemPrompt = [
-  "Voce e um assistente de voz dentro de uma call de Discord.",
-  "Responda em portugues brasileiro.",
-  "Seja breve.",
-  "Nao responda se a fala nao parecer direcionada a voce.",
-  "Evite respostas longas, listas extensas e blocos de codigo grandes.",
-  "Quando o tema for tecnico, explique de forma objetiva.",
-  "Nao solicite nem armazene dados sensiveis.",
-  "Caso o usuario peca algo que envolva dados pessoais, responda de forma cautelosa e minima."
-].join(" ");
+import { assistantSystemPrompt } from "./assistantPrompt.js";
 
 export async function askOpenAI(prompt: string, username?: string): Promise<string> {
   logger.info("Geracao de resposta iniciada.");
@@ -22,9 +12,9 @@ export async function askOpenAI(prompt: string, username?: string): Promise<stri
     ? `Usuario ${username} perguntou: ${prompt}`
     : prompt;
 
-  const response = await openai.responses.create({
+  const response = await getOpenAI().responses.create({
     model: config.openaiTextModel,
-    instructions: systemPrompt,
+    instructions: assistantSystemPrompt,
     input: userInput,
     max_output_tokens: Math.max(64, Math.ceil(config.maxResponseChars / 3))
   });

@@ -13,7 +13,7 @@ export function createDiscordClient(): Client {
     partials: [Partials.Channel]
   });
 
-  client.once("ready", () => {
+  client.once("clientReady", () => {
     logger.info(`Bot conectado como ${client.user?.tag ?? "desconhecido"}.`);
   });
 
