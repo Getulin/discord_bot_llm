@@ -28,9 +28,9 @@ function booleanEnv(name: string, fallback: boolean): boolean {
 export const config = {
   discordToken: required("DISCORD_TOKEN"),
   openaiApiKey: process.env.OPENAI_API_KEY?.trim(),
-  wakeWord: process.env.WAKE_WORD?.trim() || "daVinci",
+  wakeWord: process.env.WAKE_WORD?.trim() || "Varys",
   wakeWordAliases: wakeWordAliases(
-    process.env.WAKE_WORD?.trim() || "daVinci",
+    process.env.WAKE_WORD?.trim() || "Varys",
     process.env.WAKE_WORD_ALIASES
   ),
   sttProvider: parseProvider(process.env.STT_PROVIDER, "openai"),
@@ -62,7 +62,7 @@ export const config = {
   whisperCppThreads: numberEnv("WHISPER_CPP_THREADS", 4),
   whisperCppPrompt:
     process.env.WHISPER_CPP_PROMPT?.trim() ||
-    "Palavra de ativacao: daVinci. Termos comuns: creatina, suplemento, treino, academia, proteina, criptografia.",
+    "Palavra de ativacao: Varys. Tambem pode soar como Verris em portugues. Termos comuns: creatina, suplemento, treino, academia, proteina, criptografia.",
   whisperNoSpeechThreshold: numberEnv("WHISPER_NO_SPEECH_THRESHOLD", 0.35),
   audioNormalize: booleanEnv("AUDIO_NORMALIZE", true),
   audioDenoise: booleanEnv("AUDIO_DENOISE", true),
@@ -113,8 +113,8 @@ function wakeWordAliases(wakeWord: string, rawAliases: string | undefined): stri
     if (trimmed) aliases.add(trimmed);
   }
 
-  if (wakeWord.toLowerCase() === "davinci") {
-    for (const alias of ["da vinci", "davince", "davins", "davinsi", "da vinte"]) {
+  if (wakeWord.toLowerCase() === "varys") {
+    for (const alias of ["verris", "veris", "varis", "vares"]) {
       aliases.add(alias);
     }
   }

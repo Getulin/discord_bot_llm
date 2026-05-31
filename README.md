@@ -1,6 +1,6 @@
 # discord_bot_llm
 
-Bot de Discord em Node.js/TypeScript que entra em uma call, escuta audio dos usuarios e responde por voz somente quando a palavra-chave configurada e detectada. O bot pode rodar com `whisper.cpp` para transcricao, Groq ou Ollama para resposta e Piper para voz. Tambem pode usar OpenAI por configuracao. O bot nao usa interface web do ChatGPT, automacao de navegador, cookies, login pessoal ou scraping.
+Bot de Discord em Node.js/TypeScript que entra em uma call, escuta audio dos usuarios e responde por voz somente quando a palavra-chave configurada e detectada. O bot pode rodar com `whisper.cpp` para transcricao, Groq ou Ollama para resposta, e Piper ou OpenAI para voz. O bot nao usa interface web do ChatGPT, automacao de navegador, cookies, login pessoal ou scraping.
 
 ## Arquitetura
 
@@ -44,7 +44,8 @@ Crie o `.env` a partir de `.env.example`:
 ```env
 DISCORD_TOKEN=
 OPENAI_API_KEY=
-WAKE_WORD=daVinci
+WAKE_WORD=Varys
+WAKE_WORD_ALIASES=verris,veris,varis,vares
 STT_PROVIDER=local
 AI_TEXT_PROVIDER=groq
 TTS_PROVIDER=local
@@ -67,7 +68,7 @@ WHISPER_CPP_BIN=whisper-cli
 WHISPER_CPP_MODEL=models/whisper/ggml-base.bin
 WHISPER_CPP_LANGUAGE=pt
 WHISPER_CPP_THREADS=4
-WHISPER_CPP_PROMPT=Palavra de ativacao: daVinci. Termos comuns: creatina, suplemento, treino, academia, proteina, criptografia.
+WHISPER_CPP_PROMPT=Palavra de ativacao: Varys. Tambem pode soar como Verris em portugues. Termos comuns: creatina, suplemento, treino, academia, proteina, criptografia.
 WHISPER_NO_SPEECH_THRESHOLD=0.35
 WHISPER_CPP_TIMEOUT_MS=120000
 PIPER_BIN=piper
@@ -171,15 +172,15 @@ WHISPER_CPP_BIN=whisper-cli
 
 Baixe o Piper: https://github.com/rhasspy/piper
 
-Baixe uma voz `.onnx` e o arquivo `.onnx.json` correspondente. Para portugues brasileiro, procure uma voz `pt_BR` nos modelos do Piper. Coloque os arquivos em `models/piper/`.
+Baixe uma voz `.onnx` e o arquivo `.onnx.json` correspondente. Para portugues brasileiro, este projeto usa por padrao `pt_BR-faber-medium`. Coloque os arquivos em `models/piper/` ou aponte para os arquivos em `tools/piper/models/`.
 
 Configure:
 
 ```env
 TTS_PROVIDER=local
 PIPER_BIN=C:\caminho\para\piper.exe
-PIPER_MODEL=C:\caminho\para\voz.onnx
-PIPER_CONFIG=C:\caminho\para\voz.onnx.json
+PIPER_MODEL=C:\caminho\para\pt_BR-faber-medium.onnx
+PIPER_CONFIG=C:\caminho\para\pt_BR-faber-medium.onnx.json
 ```
 
 Se `piper` estiver no `PATH`, pode deixar:
@@ -224,9 +225,9 @@ npm start
 - `!statusbot`: mostra conexao, palavra-chave, provedores de transcricao/resposta/voz, mute e processamento.
 - `!privacidade`: explica como audio, transcricao, resposta e voz sao usados.
 
-Exemplo de acionamento: `daVinci, qual e a capital da Franca?`
+Exemplo de acionamento: `Varys, qual e a capital da Franca?`
 
-O bot transcreve o trecho, verifica a palavra-chave, remove `daVinci` e envia somente `qual e a capital da Franca?` para a geracao de resposta.
+O bot transcreve o trecho, verifica a palavra-chave, remove `Varys` e envia somente `qual e a capital da Franca?` para a geracao de resposta.
 
 ## Privacidade
 
@@ -236,11 +237,11 @@ Ao entrar na call, o bot envia:
 
 Resposta do comando `!privacidade`:
 
-> Este bot transcreve solicitacoes acionadas por palavra-chave, gera uma resposta curta e reproduz a resposta por voz. As etapas podem usar provedores locais, como whisper.cpp, Ollama e Piper, ou a API oficial da OpenAI conforme configuracao. Ele nao acessa sua conta pessoal do ChatGPT. Audios e transcricoes sao usados temporariamente durante o processamento e descartados em seguida. O bot nao mantem historico permanente da call.
+> Este bot transcreve solicitacoes acionadas por palavra-chave, gera uma resposta curta e reproduz a resposta por voz. As etapas podem usar provedores locais, como whisper.cpp, Ollama e Piper, ou APIs oficiais como Groq e OpenAI conforme configuracao. Ele nao acessa sua conta pessoal do ChatGPT. Audios e transcricoes sao usados temporariamente durante o processamento e descartados em seguida. O bot nao mantem historico permanente da call.
 
 Aviso pronto para colocar no servidor:
 
-> Este servidor pode usar um bot de voz com IA. O bot processa audio temporariamente apenas para detectar uma palavra-chave configurada e responder quando acionado. As etapas podem rodar localmente com whisper.cpp, Ollama e Piper, ou usar a API oficial da OpenAI conforme configuracao. Audios e transcricoes nao sao salvos permanentemente pelo bot, e ele nao usa contas pessoais do ChatGPT.
+> Este servidor pode usar um bot de voz com IA. O bot processa audio temporariamente apenas para detectar uma palavra-chave configurada e responder quando acionado. As etapas podem rodar localmente com whisper.cpp, Ollama e Piper, ou usar APIs oficiais como Groq e OpenAI conforme configuracao. Audios e transcricoes nao sao salvos permanentemente pelo bot, e ele nao usa contas pessoais do ChatGPT.
 
 ## Referencias
 
