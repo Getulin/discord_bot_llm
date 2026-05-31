@@ -1,14 +1,19 @@
 import { writeFile } from "node:fs/promises";
-import { openai } from "./openaiClient.js";
+import { getOpenAI } from "./openaiClient.js";
 import { config } from "../config.js";
 import { createTempFilePath, removeTempFile } from "../utils/tempFiles.js";
 import { logger } from "../utils/logger.js";
+import { textToSpeechLocal } from "./localTts.js";
 
 export async function textToSpeech(text: string): Promise<string> {
+  if (config.ttsProvider === "local") {
+    return textToSpeechLocal(text);
+  }
+
   logger.info("Sintese de voz iniciada.");
   const outputPath = await createTempFilePath(".mp3");
   try {
-    const audio = await openai.audio.speech.create({
+    const audio = await getOpenAI().audio.speech.create({
       model: config.openaiTtsModel,
       voice: config.openaiTtsVoice,
       input: text,

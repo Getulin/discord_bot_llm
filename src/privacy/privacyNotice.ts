@@ -4,4 +4,4 @@ export const callJoinPrivacyNotice =
 export const callLeaveNotice = "O bot saiu da call.";
 
 export const privacyCommandNotice =
-  "Este bot usa a API oficial da OpenAI para transcrever solicitacoes acionadas por palavra-chave e gerar respostas. Ele nao acessa sua conta pessoal do ChatGPT. Audios e transcricoes sao usados temporariamente durante o processamento e descartados em seguida. O bot nao mantem historico permanente da call.";
+  "Este bot transcreve solicitacoes acionadas por palavra-chave, gera uma resposta curta e reproduz a resposta por voz. As etapas podem usar provedores locais, como whisper.cpp, Ollama e Piper, ou a API oficial da OpenAI conforme configuracao. Ele nao acessa sua conta pessoal do ChatGPT. Audios e transcricoes sao usados temporariamente durante o processamento e descartados em seguida. O bot nao mantem historico permanente da call.";

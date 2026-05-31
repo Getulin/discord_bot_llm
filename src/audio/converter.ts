@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { createTempFilePath, removeTempFile } from "../utils/tempFiles.js";
 import { logger } from "../utils/logger.js";
+import { config } from "../config.js";
 
 const require = createRequire(import.meta.url);
 const ffmpegStaticPath = require("ffmpeg-static") as string | null;
@@ -9,10 +10,11 @@ const ffmpegPath = ffmpegStaticPath || "ffmpeg";
 
 export async function convertPcmToWav(pcmPath: string): Promise<string> {
   const wavPath = await createTempFilePath(".wav");
+  const audioFilters = buildAudioFilters();
 
   try {
     await new Promise<void>((resolve, reject) => {
-      const ffmpeg = spawn(ffmpegPath, [
+      const args = [
         "-y",
         "-f",
         "s16le",
@@ -26,8 +28,11 @@ export async function convertPcmToWav(pcmPath: string): Promise<string> {
         "1",
         "-ar",
         "16000",
+        ...(audioFilters ? ["-af", audioFilters] : []),
         wavPath
-      ]);
+      ];
+
+      const ffmpeg = spawn(ffmpegPath, args);
 
       ffmpeg.once("error", reject);
       ffmpeg.once("close", (code: number | null) => {
@@ -45,4 +50,26 @@ export async function convertPcmToWav(pcmPath: string): Promise<string> {
 
   logger.info("Conversao de audio concluida.");
   return wavPath;
+}
+
+function buildAudioFilters(): string {
+  const filters = [];
+
+  if (config.audioHighpassHz > 0) {
+    filters.push(`highpass=f=${config.audioHighpassHz}`);
+  }
+
+  if (config.audioLowpassHz > 0) {
+    filters.push(`lowpass=f=${config.audioLowpassHz}`);
+  }
+
+  if (config.audioDenoise) {
+    filters.push("afftdn=nf=-25");
+  }
+
+  if (config.audioNormalize) {
+    filters.push("loudnorm=I=-18:TP=-2:LRA=11");
+  }
+
+  return filters.join(",");
 }
