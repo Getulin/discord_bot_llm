@@ -1,11 +1,19 @@
 import { config } from "../config.js";
-import { askGroq } from "./groqText.js";
+import { askGemini } from "./geminiText.js";
 import { askOllama } from "./ollamaText.js";
 import { askOpenAI } from "./openaiText.js";
 
-export async function askAssistant(prompt: string, username?: string): Promise<string> {
-  if (config.aiTextProvider === "groq") {
-    return askGroq(prompt, username);
+type AssistantContext = {
+  userId?: string;
+};
+
+export async function askAssistant(
+  prompt: string,
+  username?: string,
+  context: AssistantContext = {}
+): Promise<string> {
+  if (config.aiTextProvider === "gemini") {
+    return askGemini(prompt, username, context.userId);
   }
 
   if (config.aiTextProvider === "ollama") {

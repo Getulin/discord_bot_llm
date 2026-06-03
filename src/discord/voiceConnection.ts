@@ -545,7 +545,7 @@ async function handleCapturedSpeech(session: Session, speech: CapturedSpeech): P
 
     logger.info("Usuario acionou palavra-chave.");
     const answerStartedAt = Date.now();
-    const answer = await askAssistant(prompt, userLabel);
+    const answer = await askAssistant(prompt, userLabel, { userId: speech.userId });
     logger.info(`Etapa resposta concluida em ${Date.now() - answerStartedAt}ms.`);
     if (!answer) {
       return;
