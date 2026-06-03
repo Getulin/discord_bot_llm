@@ -1,3 +1,4 @@
+import { createReadStream } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { once } from "node:events";
 import { EndBehaviorType, VoiceReceiver } from "@discordjs/voice";
@@ -101,6 +102,87 @@ export async function transcribeUserAudioInChunks(
     decoder.destroy();
     throw error;
   }
+}
+
+export async function transcribePcmAudioInChunks(pcmPath: string): Promise<string> {
+  logger.info("Transcricao em chunks de audio capturado iniciada.");
+
+  const chunkBytes = Math.max(1, Math.floor(config.audioChunkMs * pcmBytesPerMs));
+  const minChunkBytes = Math.max(1, Math.floor(config.audioMinChunkMs * pcmBytesPerMs));
+  const transcripts: string[] = [];
+  const pendingTranscripts: Array<Promise<void>> = [];
+  let buffers: Buffer[] = [];
+  let bufferedBytes = 0;
+  let chunkIndex = 0;
+  let activeTranscriptions = 0;
+
+  async function waitForFreeSlot(): Promise<void> {
+    while (activeTranscriptions >= config.audioChunkConcurrency) {
+      await Promise.race(pendingTranscripts);
+    }
+  }
+
+  function enqueueChunk(force: boolean): void {
+    if (bufferedBytes === 0) return;
+    if (!force && bufferedBytes < chunkBytes) return;
+    if (force && bufferedBytes < minChunkBytes && transcripts.length > 0) return;
+
+    const chunk = Buffer.concat(buffers, bufferedBytes);
+    buffers = [];
+    bufferedBytes = 0;
+    chunkIndex += 1;
+    const currentIndex = chunkIndex;
+
+    const task = (async () => {
+      await waitForFreeSlot();
+      activeTranscriptions += 1;
+      const text = await transcribePcmChunk(chunk, currentIndex);
+      if (text) {
+        transcripts[currentIndex - 1] = text;
+      }
+    })().finally(() => {
+      activeTranscriptions -= 1;
+      const index = pendingTranscripts.indexOf(task);
+      if (index !== -1) {
+        pendingTranscripts.splice(index, 1);
+      }
+    });
+
+    pendingTranscripts.push(task);
+  }
+
+  for await (const chunk of createReadStream(pcmPath)) {
+    buffers.push(chunk);
+    bufferedBytes += chunk.length;
+    enqueueChunk(false);
+  }
+
+  enqueueChunk(true);
+  await Promise.all(pendingTranscripts);
+  logger.info(`Transcricao em chunks concluida com ${chunkIndex} chunk(s).`);
+  return transcripts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+}
+
+export async function transcribePcmAudioPrefix(
+  pcmPath: string,
+  durationMs: number
+): Promise<string> {
+  const prefixBytes = Math.max(1, Math.floor(durationMs * pcmBytesPerMs));
+  const buffers: Buffer[] = [];
+  let bufferedBytes = 0;
+
+  logger.info(`Transcricao curta de palavra-chave iniciada (${durationMs}ms).`);
+
+  for await (const chunk of createReadStream(pcmPath, { end: prefixBytes - 1 })) {
+    buffers.push(chunk);
+    bufferedBytes += chunk.length;
+  }
+
+  if (bufferedBytes === 0) {
+    return "";
+  }
+
+  return transcribePcmChunk(Buffer.concat(buffers, bufferedBytes), 0);
 }
 
 async function transcribePcmChunk(chunk: Buffer, chunkIndex: number): Promise<string> {

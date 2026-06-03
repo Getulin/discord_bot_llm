@@ -10,11 +10,13 @@ import {
   getVoiceConnection,
   joinVoiceChannel,
   VoiceConnection,
-  VoiceReceiver,
   VoiceConnectionStatus
 } from "@discordjs/voice";
 import { callJoinPrivacyNotice, callLeaveNotice } from "../privacy/privacyNotice.js";
-import { transcribeUserAudioInChunks } from "../audio/chunkedTranscriber.js";
+import {
+  transcribePcmAudioInChunks,
+  transcribePcmAudioPrefix
+} from "../audio/chunkedTranscriber.js";
 import { recordUserAudio } from "../audio/recorder.js";
 import { convertPcmToWav } from "../audio/converter.js";
 import { playAudioFile, makeAudioPlayer } from "../audio/player.js";
@@ -23,7 +25,7 @@ import { askAssistant } from "../services/assistantText.js";
 import { textToSpeech } from "../services/tts.js";
 import { config } from "../config.js";
 import { Cooldown } from "../utils/cooldown.js";
-import { extractPromptAfterWakeWord } from "../utils/sanitize.js";
+import { containsWakeWord, extractPromptAfterWakeWord } from "../utils/sanitize.js";
 import { removeTempFile } from "../utils/tempFiles.js";
 import { logger } from "../utils/logger.js";
 import { publicProcessingErrorMessage } from "../utils/errors.js";
@@ -34,8 +36,12 @@ type Session = {
   player: AudioPlayer;
   textChannel: GuildTextBasedChannel;
   muted: boolean;
-  processing: boolean;
   speaking: boolean;
+  activeCaptures: Set<string>;
+  processingUsers: Set<string>;
+  userSpeechQueues: Map<string, CapturedSpeech[]>;
+  playbackQueue: PlaybackSpeech[];
+  playing: boolean;
   cooldown: Cooldown;
   ready: boolean;
   privacyNoticeSent: boolean;
@@ -45,6 +51,17 @@ type Session = {
   lastPublicErrorAt: number;
   disconnectStartedAt?: number;
   reconnectTimer?: NodeJS.Timeout;
+};
+
+type CapturedSpeech = {
+  userId: string;
+  pcmPath: string;
+};
+
+type PlaybackSpeech = {
+  userId: string;
+  userLabel: string;
+  speechPath: string;
 };
 
 const sessions = new Map<string, Session>();
@@ -74,6 +91,7 @@ export async function joinUserVoiceChannel(
   }
   if (existing) {
     destroyConnection(existing.connection);
+    void cleanupQueuedAudio(existing);
   }
   sessions.delete(member.guild.id);
 
@@ -83,8 +101,12 @@ export async function joinUserVoiceChannel(
     player: makeAudioPlayer(),
     textChannel,
     muted: false,
-    processing: false,
     speaking: false,
+    activeCaptures: new Set<string>(),
+    processingUsers: new Set<string>(),
+    userSpeechQueues: new Map<string, CapturedSpeech[]>(),
+    playbackQueue: [],
+    playing: false,
     cooldown: new Cooldown(config.cooldownMs),
     ready: false,
     privacyNoticeSent: false,
@@ -118,6 +140,9 @@ export async function leaveVoiceChannel(
     destroyConnection(connection);
   }
 
+  if (session) {
+    void cleanupQueuedAudio(session);
+  }
   sessions.delete(guildId);
   await (textChannel ?? session?.textChannel)?.send(callLeaveNotice).catch(() => undefined);
 }
@@ -158,7 +183,11 @@ export function getBotStatus(guildId: string): string {
     `- voz: ${config.ttsProvider}`,
     `- mutado: ${session.muted ? "sim" : "nao"}`,
     `- voz pronta: ${session.ready ? "sim" : "nao"}`,
-    `- processamento em andamento: ${session.processing ? "sim" : "nao"}`
+    `- capturas ativas: ${session.activeCaptures.size}/${config.maxActiveCaptures}`,
+    `- fila de falas: ${countQueuedSpeech(session)}/${config.maxSpeechQueueSize} por usuario`,
+    `- usuarios processando: ${session.processingUsers.size}`,
+    `- fila de reproducao: ${session.playbackQueue.length}`,
+    `- reproducao em andamento: ${session.playing ? "sim" : "nao"}`
   ].join("\n");
 }
 
@@ -269,6 +298,7 @@ async function connectSessionWithRetries(session: Session): Promise<boolean> {
 async function reconnectSession(session: Session): Promise<void> {
   clearReconnectTimer(session);
   destroyConnection(session.connection);
+  void cleanupQueuedAudio(session);
   session.ready = false;
   session.receiverBound = false;
   session.connection = createVoiceConnection(session.voiceChannel);
@@ -336,6 +366,7 @@ function destroyDisconnectedSession(session: Session): void {
   sessions.delete(session.guildId);
   clearReconnectTimer(session);
   destroyConnection(session.connection);
+  void cleanupQueuedAudio(session);
 
   void session.textChannel
     .send("Perdi a conexao com a call e sai do canal de voz.")
@@ -367,10 +398,14 @@ function bindReceiver(session: Session): void {
     if (
       userId === botId ||
       session.muted ||
-      session.processing ||
-      session.speaking ||
+      session.activeCaptures.has(userId) ||
       !session.ready
     ) {
+      return;
+    }
+
+    if (session.activeCaptures.size >= config.maxActiveCaptures) {
+      logger.info("Limite de capturas simultaneas atingido; fala ignorada.");
       return;
     }
 
@@ -378,25 +413,120 @@ function bindReceiver(session: Session): void {
       return;
     }
 
-    void handleSpeech(session, userId);
+    void captureSpeech(session, userId);
   });
 }
 
-async function handleSpeech(session: Session, userId: string): Promise<void> {
-  let pcmPath: string | undefined;
-  let wavPath: string | undefined;
-  let speechPath: string | undefined;
-  const startedAt = Date.now();
-
-  session.processing = true;
-  logger.info("Usuario acionou captura de fala.");
+async function captureSpeech(session: Session, userId: string): Promise<void> {
+  session.activeCaptures.add(userId);
+  const userLabel = await getUserLabel(session, userId);
+  logger.info(`Captura de fala iniciada para ${userLabel}.`);
 
   try {
     const recordStartedAt = Date.now();
+    const pcmPath = await recordUserAudio(session.connection.receiver, userId);
+    logger.info(`Captura de ${userLabel} concluida em ${Date.now() - recordStartedAt}ms.`);
+    if (!isSessionActive(session)) {
+      await removeTempFile(pcmPath);
+      return;
+    }
+
+    enqueueCapturedSpeech(session, { userId, pcmPath });
+  } catch (error) {
+    logger.error(`Erro generico durante captura de fala de ${userLabel}.`, error);
+    await sendThrottledProcessingError(session, error);
+  } finally {
+    session.activeCaptures.delete(userId);
+  }
+}
+
+function enqueueCapturedSpeech(session: Session, speech: CapturedSpeech): void {
+  if (!isSessionActive(session)) {
+    void removeTempFile(speech.pcmPath);
+    return;
+  }
+
+  const queue = session.userSpeechQueues.get(speech.userId) ?? [];
+  if (queue.length >= config.maxSpeechQueueSize) {
+    logger.info("Fila de falas do usuario cheia; audio capturado descartado.");
+    void removeTempFile(speech.pcmPath);
+    return;
+  }
+
+  queue.push(speech);
+  session.userSpeechQueues.set(speech.userId, queue);
+  logger.info(`Fala capturada adicionada a fila do usuario. Itens pendentes: ${queue.length}.`);
+  void processUserSpeechQueue(session, speech.userId);
+}
+
+async function processUserSpeechQueue(session: Session, userId: string): Promise<void> {
+  if (!isSessionActive(session)) {
+    await cleanupQueuedAudio(session);
+    return;
+  }
+
+  if (session.processingUsers.has(userId)) {
+    return;
+  }
+
+  const queue = session.userSpeechQueues.get(userId);
+  if (!queue) {
+    session.userSpeechQueues.delete(userId);
+    return;
+  }
+
+  const speech = queue.shift();
+  if (!speech) {
+    session.userSpeechQueues.delete(userId);
+    return;
+  }
+
+  session.processingUsers.add(userId);
+  try {
+    await handleCapturedSpeech(session, speech);
+  } finally {
+    session.processingUsers.delete(userId);
+    if (queue.length > 0) {
+      void processUserSpeechQueue(session, userId);
+    } else {
+      session.userSpeechQueues.delete(userId);
+    }
+  }
+}
+
+async function handleCapturedSpeech(session: Session, speech: CapturedSpeech): Promise<void> {
+  let speechPath: string | undefined;
+  const startedAt = Date.now();
+  const userLabel = await getUserLabel(session, speech.userId);
+
+  logger.info(`Processamento de fala capturada iniciado para ${userLabel}.`);
+
+  try {
+    if (config.wakeWordGateEnabled) {
+      const wakeGateStartedAt = Date.now();
+      const wakeTranscript = await transcribePcmAudioPrefix(
+        speech.pcmPath,
+        config.wakeWordGateMs
+      );
+      logger.info(`Etapa palavra-chave curta concluida em ${Date.now() - wakeGateStartedAt}ms.`);
+
+      if (
+        !containsWakeWord(
+          wakeTranscript,
+          config.wakeWord,
+          config.wakeWordAliases
+        )
+      ) {
+        logger.info("Palavra-chave nao encontrada no inicio do audio; fala descartada.");
+        return;
+      }
+    }
+
+    const transcribeStartedAt = Date.now();
     const transcript = config.semiRealtimeStt
-      ? await transcribeUserAudioInChunks(session.connection.receiver, userId)
-      : await recordAndTranscribeFullSpeech(session.connection.receiver, userId);
-    logger.info(`Etapa captura/transcricao concluida em ${Date.now() - recordStartedAt}ms.`);
+      ? await transcribePcmAudioInChunks(speech.pcmPath)
+      : await transcribeCapturedSpeech(speech.pcmPath);
+    logger.info(`Etapa transcricao concluida em ${Date.now() - transcribeStartedAt}ms.`);
 
     if (!transcript) {
       logger.info("Transcricao vazia ou incompreensivel; audio descartado.");
@@ -414,9 +544,8 @@ async function handleSpeech(session: Session, userId: string): Promise<void> {
     }
 
     logger.info("Usuario acionou palavra-chave.");
-    const user = await session.textChannel.client.users.fetch(userId).catch(() => undefined);
     const answerStartedAt = Date.now();
-    const answer = await askAssistant(prompt, user?.username);
+    const answer = await askAssistant(prompt, userLabel);
     logger.info(`Etapa resposta concluida em ${Date.now() - answerStartedAt}ms.`);
     if (!answer) {
       return;
@@ -425,33 +554,68 @@ async function handleSpeech(session: Session, userId: string): Promise<void> {
     const ttsStartedAt = Date.now();
     speechPath = await textToSpeech(answer);
     logger.info(`Etapa sintese de voz concluida em ${Date.now() - ttsStartedAt}ms.`);
-    session.speaking = true;
-    const playbackStartedAt = Date.now();
-    await playAudioFile(session.connection, session.player, speechPath);
-    logger.info(`Etapa reproducao concluida em ${Date.now() - playbackStartedAt}ms.`);
+    enqueuePlayback(session, { userId: speech.userId, userLabel, speechPath });
+    speechPath = undefined;
   } catch (error) {
     logger.error("Erro generico durante processamento de voz.", error);
     await sendThrottledProcessingError(session, error);
   } finally {
-    session.speaking = false;
-    session.processing = false;
-    await Promise.all([removeTempFile(pcmPath), removeTempFile(wavPath), removeTempFile(speechPath)]);
+    await Promise.all([removeTempFile(speech.pcmPath), removeTempFile(speechPath)]);
     logger.info(`Processamento concluido em ${Date.now() - startedAt}ms.`);
   }
 }
 
-async function recordAndTranscribeFullSpeech(
-  receiver: VoiceReceiver,
-  userId: string
-): Promise<string> {
-  let pcmPath: string | undefined;
+function enqueuePlayback(session: Session, playback: PlaybackSpeech): void {
+  if (!isSessionActive(session)) {
+    void removeTempFile(playback.speechPath);
+    return;
+  }
+
+  session.playbackQueue.push(playback);
+  logger.info(`Resposta de ${playback.userLabel} adicionada a fila de reproducao.`);
+  void processPlaybackQueue(session);
+}
+
+async function processPlaybackQueue(session: Session): Promise<void> {
+  if (!isSessionActive(session)) {
+    await cleanupQueuedAudio(session);
+    return;
+  }
+
+  if (session.playing) {
+    return;
+  }
+
+  const playback = session.playbackQueue.shift();
+  if (!playback) {
+    return;
+  }
+
+  session.playing = true;
+  session.speaking = true;
+  try {
+    const playbackStartedAt = Date.now();
+    logger.info(`Reproducao iniciada para resposta de ${playback.userLabel}.`);
+    await playAudioFile(session.connection, session.player, playback.speechPath);
+    logger.info(`Etapa reproducao concluida em ${Date.now() - playbackStartedAt}ms.`);
+  } catch (error) {
+    logger.error("Erro generico durante reproducao de voz.", error);
+    await sendThrottledProcessingError(session, error);
+  } finally {
+    session.speaking = false;
+    session.playing = false;
+    await removeTempFile(playback.speechPath);
+
+    if (session.playbackQueue.length > 0) {
+      void processPlaybackQueue(session);
+    }
+  }
+}
+
+async function transcribeCapturedSpeech(pcmPath: string): Promise<string> {
   let wavPath: string | undefined;
 
   try {
-    const recordStartedAt = Date.now();
-    pcmPath = await recordUserAudio(receiver, userId);
-    logger.info(`Etapa captura concluida em ${Date.now() - recordStartedAt}ms.`);
-
     const convertStartedAt = Date.now();
     wavPath = await convertPcmToWav(pcmPath);
     logger.info(`Etapa conversao concluida em ${Date.now() - convertStartedAt}ms.`);
@@ -461,8 +625,42 @@ async function recordAndTranscribeFullSpeech(
     logger.info(`Etapa transcricao concluida em ${Date.now() - transcribeStartedAt}ms.`);
     return transcript;
   } finally {
-    await Promise.all([removeTempFile(pcmPath), removeTempFile(wavPath)]);
+    await removeTempFile(wavPath);
   }
+}
+
+async function getUserLabel(session: Session, userId: string): Promise<string> {
+  const member = await session.voiceChannel.guild.members.fetch(userId).catch(() => undefined);
+  if (member) {
+    return member.displayName;
+  }
+
+  const user = await session.textChannel.client.users.fetch(userId).catch(() => undefined);
+  return user?.username ?? userId;
+}
+
+async function cleanupQueuedAudio(session: Session): Promise<void> {
+  const queuedSpeech = [...session.userSpeechQueues.values()].flat();
+  session.userSpeechQueues.clear();
+
+  const queuedPlayback = session.playbackQueue.splice(0);
+  await Promise.all([
+    ...queuedSpeech.map((speech) => removeTempFile(speech.pcmPath)),
+    ...queuedPlayback.map((playback) => removeTempFile(playback.speechPath))
+  ]);
+}
+
+function isSessionActive(session: Session): boolean {
+  return sessions.get(session.guildId) === session && isConnectionAlive(session.connection);
+}
+
+function countQueuedSpeech(session: Session): number {
+  let total = 0;
+  for (const queue of session.userSpeechQueues.values()) {
+    total += queue.length;
+  }
+
+  return total;
 }
 
 async function sendThrottledProcessingError(
