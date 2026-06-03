@@ -56,6 +56,7 @@ export const config = {
   geminiTemperature: numberEnv("GEMINI_TEMPERATURE", 0.35),
   geminiMaxTokens: numberEnv("GEMINI_MAX_TOKENS", 180),
   geminiTimeoutMs: numberEnv("GEMINI_TIMEOUT_MS", 30_000),
+  geminiContextTurns: Math.floor(numberEnv("GEMINI_CONTEXT_TURNS", 8)),
   whisperCppBin: process.env.WHISPER_CPP_BIN?.trim() || "whisper-cli",
   whisperCppModel: process.env.WHISPER_CPP_MODEL?.trim() || "models/whisper/ggml-base.bin",
   whisperCppLanguage: process.env.WHISPER_CPP_LANGUAGE?.trim() || "pt",

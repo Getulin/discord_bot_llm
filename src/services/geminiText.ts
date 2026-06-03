@@ -16,7 +16,20 @@ type GeminiResponse = {
   };
 };
 
-export async function askGemini(prompt: string, username?: string): Promise<string> {
+type GeminiContent = {
+  role: "user" | "model";
+  parts: Array<{
+    text: string;
+  }>;
+};
+
+const historyByUser = new Map<string, GeminiContent[]>();
+
+export async function askGemini(
+  prompt: string,
+  username?: string,
+  userId?: string
+): Promise<string> {
   if (!config.geminiApiKey) {
     throw new Error("GEMINI_API_KEY ausente.");
   }
@@ -27,6 +40,14 @@ export async function askGemini(prompt: string, username?: string): Promise<stri
   const userInput = username
     ? `Usuario ${username} perguntou: ${prompt}`
     : prompt;
+  const userTurn: GeminiContent = {
+    role: "user",
+    parts: [{ text: userInput }]
+  };
+  const historyKey = userId ?? username ?? "default";
+  const previousHistory = config.geminiContextTurns > 0
+    ? historyByUser.get(historyKey) ?? []
+    : [];
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.geminiTimeoutMs);
@@ -45,12 +66,7 @@ export async function askGemini(prompt: string, username?: string): Promise<stri
         systemInstruction: {
           parts: [{ text: assistantSystemPrompt }]
         },
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: userInput }]
-          }
-        ],
+        contents: [...previousHistory, userTurn],
         generationConfig: {
           temperature: config.geminiTemperature,
           maxOutputTokens: config.geminiMaxTokens
@@ -68,10 +84,29 @@ export async function askGemini(prompt: string, username?: string): Promise<stri
       body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "",
       config.maxResponseChars
     );
+    if (config.geminiContextTurns > 0 && text) {
+      historyByUser.set(
+        historyKey,
+        limitHistory([
+          ...previousHistory,
+          userTurn,
+          {
+            role: "model",
+            parts: [{ text }]
+          }
+        ])
+      );
+    }
+
     logger.info("Geracao de resposta com Gemini concluida.");
     logger.debug("Resposta mascarada:", text);
     return text;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function limitHistory(history: GeminiContent[]): GeminiContent[] {
+  const maxEntries = Math.max(0, config.geminiContextTurns) * 2;
+  return maxEntries > 0 ? history.slice(-maxEntries) : [];
 }

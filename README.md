@@ -64,6 +64,7 @@ GEMINI_MODEL=gemini-2.5-flash
 GEMINI_TEMPERATURE=0.35
 GEMINI_MAX_TOKENS=220
 GEMINI_TIMEOUT_MS=30000
+GEMINI_CONTEXT_TURNS=8
 WHISPER_CPP_BIN=whisper-cli
 WHISPER_CPP_MODEL=models/whisper/ggml-base.bin
 WHISPER_CPP_LANGUAGE=pt
@@ -123,7 +124,13 @@ Para ajustar tamanho e criatividade:
 ```env
 GEMINI_TEMPERATURE=0.35
 GEMINI_MAX_TOKENS=220
+GEMINI_CONTEXT_TURNS=8
 ```
+
+O Gemini mantem uma memoria curta em processo, separada por usuario do Discord.
+Somente falas que acionam a palavra-chave entram no contexto. `GEMINI_CONTEXT_TURNS`
+define quantos turnos recentes de cada usuario sao reenviados para a API; use `0`
+para desativar essa memoria.
 
 ### Ollama
 
