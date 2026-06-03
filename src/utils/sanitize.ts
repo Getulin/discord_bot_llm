@@ -25,6 +25,19 @@ export function extractPromptAfterWakeWord(
   return prompt.length > 0 ? prompt : null;
 }
 
+export function containsWakeWord(
+  transcript: string,
+  wakeWord: string,
+  wakeWordAliases: string[] = [wakeWord]
+): boolean {
+  const normalizedTranscript = normalizeText(transcript);
+  const normalizedWakeWords = wakeWordAliases.map(normalizeText);
+  return Boolean(
+    findExactWakeWord(normalizedTranscript, normalizedWakeWords) ??
+      findFuzzyWakeWord(normalizedTranscript, normalizedWakeWords)
+  );
+}
+
 function findExactWakeWord(
   normalizedTranscript: string,
   normalizedWakeWords: string[]
