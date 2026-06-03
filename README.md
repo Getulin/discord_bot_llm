@@ -1,6 +1,6 @@
 # discord_bot_llm
 
-Bot de Discord em Node.js/TypeScript que entra em uma call, escuta audio dos usuarios e responde por voz somente quando a palavra-chave configurada e detectada. O bot pode rodar com `whisper.cpp` para transcricao, Groq ou Ollama para resposta, e Piper ou OpenAI para voz. O bot nao usa interface web do ChatGPT, automacao de navegador, cookies, login pessoal ou scraping.
+Bot de Discord em Node.js/TypeScript que entra em uma call, escuta audio dos usuarios e responde por voz somente quando a palavra-chave configurada e detectada. O bot pode rodar com `whisper.cpp` para transcricao, Gemini ou Ollama para resposta, e Piper ou OpenAI para voz. O bot nao usa interface web do ChatGPT, automacao de navegador, cookies, login pessoal ou scraping.
 
 ## Arquitetura
 
@@ -11,9 +11,9 @@ Bot de Discord em Node.js/TypeScript que entra em uma call, escuta audio dos usu
 - `src/audio/converter.ts`: converte PCM para WAV com ffmpeg.
 - `src/services/transcribe.ts`: escolhe entre OpenAI e whisper.cpp para transcricao.
 - `src/services/localTranscribe.ts`: transcricao local com whisper.cpp.
-- `src/services/assistantText.ts`: escolhe entre OpenAI, Groq e Ollama para gerar a resposta.
+- `src/services/assistantText.ts`: escolhe entre OpenAI, Gemini e Ollama para gerar a resposta.
 - `src/services/openaiText.ts`: resposta curta usando a API oficial da OpenAI.
-- `src/services/groqText.ts`: resposta usando Groq via API compativel com OpenAI.
+- `src/services/geminiText.ts`: resposta usando a API Gemini.
 - `src/services/ollamaText.ts`: resposta curta usando Ollama local via API HTTP.
 - `src/services/tts.ts`: escolhe entre OpenAI e Piper para text-to-speech.
 - `src/services/localTts.ts`: voz local com Piper.
@@ -47,7 +47,7 @@ OPENAI_API_KEY=
 WAKE_WORD=Varys
 WAKE_WORD_ALIASES=verris,veris,varis,vares
 STT_PROVIDER=local
-AI_TEXT_PROVIDER=groq
+AI_TEXT_PROVIDER=gemini
 TTS_PROVIDER=local
 OPENAI_TEXT_MODEL=gpt-4.1-mini
 OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
@@ -58,12 +58,12 @@ OLLAMA_MODEL=llama3.2:3b
 OLLAMA_TEMPERATURE=0.4
 OLLAMA_NUM_PREDICT=90
 OLLAMA_TIMEOUT_MS=45000
-GROQ_API_KEY=
-GROQ_BASE_URL=https://api.groq.com/openai/v1
-GROQ_MODEL=llama-3.3-70b-versatile
-GROQ_TEMPERATURE=0.35
-GROQ_MAX_TOKENS=220
-GROQ_TIMEOUT_MS=30000
+GEMINI_API_KEY=
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_TEMPERATURE=0.35
+GEMINI_MAX_TOKENS=220
+GEMINI_TIMEOUT_MS=30000
 WHISPER_CPP_BIN=whisper-cli
 WHISPER_CPP_MODEL=models/whisper/ggml-base.bin
 WHISPER_CPP_LANGUAGE=pt
@@ -106,22 +106,23 @@ TTS_PROVIDER=local
 
 Com esses tres provedores locais, `OPENAI_API_KEY` nao e necessaria.
 
-## Groq Para Respostas
+## Gemini Para Respostas
 
-Groq costuma ser mais rapido e mais inteligente que modelos pequenos locais no Ollama. Use quando quiser manter transcricao e voz locais, mas melhorar a resposta:
+Gemini costuma responder melhor que modelos pequenos locais no Ollama. Use quando quiser manter transcricao e voz locais, mas melhorar a resposta:
 
 ```env
 STT_PROVIDER=local
-AI_TEXT_PROVIDER=groq
+AI_TEXT_PROVIDER=gemini
 TTS_PROVIDER=local
-GROQ_API_KEY=sua_chave_da_groq
-GROQ_MODEL=llama-3.3-70b-versatile
+GEMINI_API_KEY=sua_chave_do_gemini
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
-Para uma resposta ainda mais rapida e mais simples:
+Para ajustar tamanho e criatividade:
 
 ```env
-GROQ_MODEL=llama-3.1-8b-instant
+GEMINI_TEMPERATURE=0.35
+GEMINI_MAX_TOKENS=220
 ```
 
 ### Ollama
@@ -199,7 +200,7 @@ AI_TEXT_PROVIDER=openai
 TTS_PROVIDER=openai
 ```
 
-Voce tambem pode misturar, por exemplo: whisper.cpp local para transcricao, Groq para resposta e Piper local para voz.
+Voce tambem pode misturar, por exemplo: whisper.cpp local para transcricao, Gemini para resposta e Piper local para voz.
 
 ## Rodando
 
@@ -237,15 +238,15 @@ Ao entrar na call, o bot envia:
 
 Resposta do comando `!privacidade`:
 
-> Este bot transcreve solicitacoes acionadas por palavra-chave, gera uma resposta curta e reproduz a resposta por voz. As etapas podem usar provedores locais, como whisper.cpp, Ollama e Piper, ou APIs oficiais como Groq e OpenAI conforme configuracao. Ele nao acessa sua conta pessoal do ChatGPT. Audios e transcricoes sao usados temporariamente durante o processamento e descartados em seguida. O bot nao mantem historico permanente da call.
+> Este bot transcreve solicitacoes acionadas por palavra-chave, gera uma resposta curta e reproduz a resposta por voz. As etapas podem usar provedores locais, como whisper.cpp, Ollama e Piper, ou APIs oficiais como Gemini e OpenAI conforme configuracao. Ele nao acessa sua conta pessoal do ChatGPT. Audios e transcricoes sao usados temporariamente durante o processamento e descartados em seguida. O bot nao mantem historico permanente da call.
 
 Aviso pronto para colocar no servidor:
 
-> Este servidor pode usar um bot de voz com IA. O bot processa audio temporariamente apenas para detectar uma palavra-chave configurada e responder quando acionado. As etapas podem rodar localmente com whisper.cpp, Ollama e Piper, ou usar APIs oficiais como Groq e OpenAI conforme configuracao. Audios e transcricoes nao sao salvos permanentemente pelo bot, e ele nao usa contas pessoais do ChatGPT.
+> Este servidor pode usar um bot de voz com IA. O bot processa audio temporariamente apenas para detectar uma palavra-chave configurada e responder quando acionado. As etapas podem rodar localmente com whisper.cpp, Ollama e Piper, ou usar APIs oficiais como Gemini e OpenAI conforme configuracao. Audios e transcricoes nao sao salvos permanentemente pelo bot, e ele nao usa contas pessoais do ChatGPT.
 
 ## Referencias
 
-- Groq rate limits: https://console.groq.com/docs/rate-limits
+- Gemini API: https://ai.google.dev/api/generate-content
 - API de chat do Ollama: https://docs.ollama.com/api/chat
 - Documentacao geral da API: https://docs.ollama.com/api
 - whisper.cpp: https://github.com/ggml-org/whisper.cpp

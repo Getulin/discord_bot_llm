@@ -48,14 +48,14 @@ export const config = {
   ollamaTemperature: numberEnv("OLLAMA_TEMPERATURE", 0.4),
   ollamaNumPredict: numberEnv("OLLAMA_NUM_PREDICT", 180),
   ollamaTimeoutMs: numberEnv("OLLAMA_TIMEOUT_MS", 45_000),
-  groqApiKey: process.env.GROQ_API_KEY?.trim(),
-  groqBaseUrl: trimTrailingSlash(
-    process.env.GROQ_BASE_URL?.trim() || "https://api.groq.com/openai/v1"
+  geminiApiKey: process.env.GEMINI_API_KEY?.trim(),
+  geminiBaseUrl: trimTrailingSlash(
+    process.env.GEMINI_BASE_URL?.trim() || "https://generativelanguage.googleapis.com/v1beta"
   ),
-  groqModel: process.env.GROQ_MODEL?.trim() || "llama-3.3-70b-versatile",
-  groqTemperature: numberEnv("GROQ_TEMPERATURE", 0.35),
-  groqMaxTokens: numberEnv("GROQ_MAX_TOKENS", 180),
-  groqTimeoutMs: numberEnv("GROQ_TIMEOUT_MS", 30_000),
+  geminiModel: process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
+  geminiTemperature: numberEnv("GEMINI_TEMPERATURE", 0.35),
+  geminiMaxTokens: numberEnv("GEMINI_MAX_TOKENS", 180),
+  geminiTimeoutMs: numberEnv("GEMINI_TIMEOUT_MS", 30_000),
   whisperCppBin: process.env.WHISPER_CPP_BIN?.trim() || "whisper-cli",
   whisperCppModel: process.env.WHISPER_CPP_MODEL?.trim() || "models/whisper/ggml-base.bin",
   whisperCppLanguage: process.env.WHISPER_CPP_LANGUAGE?.trim() || "pt",
@@ -93,10 +93,10 @@ export const config = {
   debug: booleanEnv("DEBUG", false)
 };
 
-function parseTextProvider(value: string | undefined): "openai" | "ollama" | "groq" {
+function parseTextProvider(value: string | undefined): "openai" | "ollama" | "gemini" {
   const normalized = value?.trim().toLowerCase();
   if (normalized === "ollama") return "ollama";
-  if (normalized === "groq") return "groq";
+  if (normalized === "gemini") return "gemini";
   return "openai";
 }
 

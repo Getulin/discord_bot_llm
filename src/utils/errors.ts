@@ -23,12 +23,12 @@ export function publicProcessingErrorMessage(error: unknown): string {
     return "Nao consegui gerar resposta com Ollama. Verifique se o Ollama esta rodando e se o modelo configurado foi baixado.";
   }
 
-  if (String(err.message ?? "").includes("GROQ_API_KEY")) {
-    return "GROQ_API_KEY esta ausente. Cole sua chave da Groq no .env para usar AI_TEXT_PROVIDER=groq.";
+  if (String(err.message ?? "").includes("GEMINI_API_KEY")) {
+    return "GEMINI_API_KEY esta ausente. Cole sua chave do Gemini no .env para usar AI_TEXT_PROVIDER=gemini.";
   }
 
-  if (String(err.message ?? "").toLowerCase().includes("groq")) {
-    return "Nao consegui gerar resposta com Groq. Verifique GROQ_API_KEY, modelo e limites da conta.";
+  if (String(err.message ?? "").toLowerCase().includes("gemini")) {
+    return "Nao consegui gerar resposta com Gemini. Verifique GEMINI_API_KEY, modelo e limites da conta.";
   }
 
   if (String(err.message ?? "").toLowerCase().includes("whisper")) {
